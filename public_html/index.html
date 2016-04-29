@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<!--
+To change this license header, choose License Headers in Project Properties.
+To change this template file, choose Tools | Templates
+and open the template in the editor.
+-->
+<html>
+    <head>
+        <title>a simple modeling</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script type="text/javascript">
+            // premenna plan sluzi na vytvorenie objektu World,
+            // # - predstavuje stenu, alebo skalu, t.j. miesto v "svete", kde zivocichy nemaju pristup
+            // o - predstavuje zivocicha
+            var plan = ["############################",
+                        "#      #    #      o      ##",
+                        "#                          #",
+                        "#          #####           #",
+                        "##         #   #    ##     #",
+                        "###           ##     #     #",
+                        "#           ###      #     #",
+                        "#   ####                   #",
+                        "#   ##       o             #",
+                        "# o  #         o       ### #",
+                        "#    #                     #",
+                        "############################"];
+                    
+            // objekt Vektor predstavuje suradnice            
+            function Vector(x, y) {
+              this.x = x;
+              this.y = y;
+            }
+            Vector.prototype.plus = function(other) {
+              return new Vector(this.x + other.x, this.y + other.y);
+            };
+
+            // objekt Grid je gridom "sveta"
+            function Grid(width, height) {
+              this.space = new Array(width * height);
+              this.width = width;
+              this.height = height;
+            }
+            // metoda sa pouziva na zistenie, ci dana suradnica je v gride
+            Grid.prototype.isInside = function(vector) {
+              return vector.x >= 0 && vector.x < this.width &&
+                     vector.y >= 0 && vector.y < this.height;
+            };
+            // metoda vrati hodnotu prvku na suradnici vector 
+            Grid.prototype.get = function(vector) {
+              return this.space[vector.x + this.width * vector.y];
+            };
+            // metoda nastavi hodnotu na suradnici vector
+            Grid.prototype.set = function(vector, value) {
+              this.space[vector.x + this.width * vector.y] = value;
+            };
+            // zadefinuje sa specialna metoda, aby sa vyvolala 
+            // funkcia f pre kazdy prvok v gride
+            Grid.prototype.forEach = function(f, context) {
+                for (var y = 0; y < this.height; y++) {
+                    for (var x = 0; x < this.width; x++) {
+                      var value = this.space[x + y * this.width];
+                      if (value !== null)
+                        f.call(context, value, new Vector(x, y));
+                    }
+                }
+            };
+
+            // object, ktory priraduje rozdiely suradnic v roznych smeroch
+            // (s tym, ze suradica 0,0 je vlavo hore
+            var directions = {
+              "n":  new Vector( 0, -1),
+              "ne": new Vector( 1, -1),
+              "e":  new Vector( 1,  0),
+              "se": new Vector( 1,  1),
+              "s":  new Vector( 0,  1),
+              "sw": new Vector(-1,  1),
+              "w":  new Vector(-1,  0),
+              "nw": new Vector(-1, -1)
+            };
+
+            // funkcia, ktora vybere nahodny prvok z pola
+            function randomElement(array) {
+              return array[Math.floor(Math.random() * array.length)];
+            }
+
+            // vytvori sa pole s menami smerov
+            var directionNames = "n ne e se s sw w nw".split(" ");
+
+            // zadefinovanie objektu "skakajuceho" zivocicha    
+            function BouncingCritter() {
+              // v konstruktore vytvorime nahodny smer vo "svete", kde
+              // sa zivocich bude pohybovat
+              this.direction = randomElement(directionNames);
+            };
+            // "skakajuci" zivocich vie sa pohybovat na suradnicu, ktora je prazdna
+            BouncingCritter.prototype.act = function(view) {
+              // najprv sa pozrieme, ci nahodne vybraty smer je volny (pomocou objektu view)
+              // ak nie, skusime najst iny smer, ktory je volny 
+              if (view.look(this.direction) !== " ")
+                this.direction = view.find(" ") || "s";
+              return {type: "move", direction: this.direction};
+            };
+
+            // funkcia vytvori instanciu objektu "sveta" z legendy, kde ku kazdemu znaku je priradeny
+            // objekt; k instancii objektu je vytvorena premenna originChar, kde je priradeny
+            // znak patriaci k objektu
+            function elementFromChar(legend, ch) {
+              if (ch === " ")
+                return null;
+              var element = new legend[ch]();
+              element.originChar = ch;
+              return element;
+            }
+            
+            // funkcia vracajuca znak, ktory je priradeny k objektu "sveta"
+            function charFromElement(element) {
+              if (element === null)
+                return " ";
+              else
+                return element.originChar;
+            }
+            
+            // objekt sveta, ktory zapuzdruje grid sveta, aj legendu k tomuto gridu  
+            function World(map, legend) {
+              // vytvori sa prazdny grid velkosti podla mapy  
+              var grid = new Grid(map[0].length, map.length);
+              this.grid = grid;
+              this.legend = legend;
+
+              // pre kazdy prvok gridu sa nastavi prislusny objekt podla mapy
+              // pozn.: prvy parameter funcie pre forEach predstavuje aktualny prvok, ktory sa spracuje
+              // druhy parameter funcie pre forEach predstavuje index aktualneho prvku, ktory sa spracuje
+              map.forEach(function(line, y) {
+                for (var x = 0; x < line.length; x++)
+                  grid.set(new Vector(x, y),elementFromChar(legend, line[x]));
+              });
+            }
+            // metoda vrati textovu podobu sveta, a to tak, ze pre kazdy objekt v gride
+            // vrati prisluchajuci znak
+            World.prototype.toString = function() {
+              var output = "";
+              for (var y = 0; y < this.grid.height; y++) {
+                for (var x = 0; x < this.grid.width; x++) {
+                  var element = this.grid.get(new Vector(x, y));
+                  output += charFromElement(element);
+                }
+                output += "\n";
+              }
+              return output;
+            };
+
+            // zadefinovanie objektu steny    
+            function Wall() {}
+
+            // zadefinovanie objektu "svet" s planom, aj s legendou    
+            var world = new World(plan, {"#": Wall,
+                                         "o": BouncingCritter});
+            //   #      #    #      o      ##
+            //   #                          #
+            //   #          #####           #
+            //   ##         #   #    ##     #
+            //   ###           ##     #     #
+            //   #           ###      #     #
+            //   #   ####                   #
+            //   #   ##       o             #
+            //   # o  #         o       ### #
+            //   #    #                     #
+            //   ############################
+
+
+            // metoda na zmenu stavu v gride, t.j. vyvolanie pohybu zivocichov
+            // pre kazdy prvok v gride sa urobi:
+            // - skontroluje sa, ci zivocich ma metodu act, a ci je v poli acted,
+            //   toto pole sa pouziva na to, aby sa zapamatalo, ktory zivocich
+            //   uz prislusnu cinnost urobil (moze sa stat, ze sa posunie o poziciu 
+            //   dalej, potom aby prenho nebol zase vykonany act)
+            // - zivocich sa prida do pola acted
+            // - vykona sa pre zivocicha cinnost (letAct)
+            World.prototype.turn = function() {
+              var acted = [];
+              this.grid.forEach(function(critter, vector) {
+                if (critter.act && acted.indexOf(critter) === -1) {
+                  acted.push(critter);
+                  this.letAct(critter, vector);
+                }
+              }, this);
+            };
+
+            // metoda, ktora vyvola cinnost zivocicha
+            // ak typ cinnosti je "move", kontroluje sa, ci dany ciel je OK
+            // (t.j. dana pozicia je vo vnutri gridu); ak ano, povodna pozicia
+            // v gride sa uvolni, a obsadi sa nova 
+            // 
+            World.prototype.letAct = function(critter, vector) {
+              var action = critter.act(new View(this, vector));
+              if (action && action.type === "move") {
+                var dest = this.checkDestination(action, vector);
+                if (dest && this.grid.get(dest) == null) {
+                  this.grid.set(vector, null);
+                  this.grid.set(dest, critter);
+                }
+              }
+            };
+
+            // metoda najprv skontroluje, ci vobec existuje smer akcie (pohybu)
+            // ak ano, skontroluje sa este, ci pozicia v danom smere je este 
+            // sucastou gridu
+            World.prototype.checkDestination = function(action, vector) {
+              if (directions.hasOwnProperty(action.direction)) {
+                var dest = vector.plus(directions[action.direction]);
+                if (this.grid.isInside(dest))
+                  return dest;
+              }
+            };
+
+            // definicia objektu View - pomocny objekt pre pohyb v gride    
+            function View(world, vector) {
+              this.world = world;
+              this.vector = vector;
+            }
+            // metoda pozrie, co je na pozicii v danom smere
+            // ak tato pozicia uz nie je v gride, tak sa vrati znak "#" (stena)
+            // inak sa vrati znak na danej pozicii
+            View.prototype.look = function(dir) {
+              var target = this.vector.plus(directions[dir]);
+              if (this.world.grid.isInside(target))
+                return charFromElement(this.world.grid.get(target));
+              else
+                return "#";
+            };
+            // metoda vrati pole vsetkych smerov, kde sa nachadza znak v parametri
+            View.prototype.findAll = function(ch) {
+              var found = [];
+              for (var dir in directions)
+                if (this.look(dir) == ch)
+                  found.push(dir);
+              return found;
+            };
+            // metoda vrati niektory zo smerov (nahodne), kde sa nachadza znak v parametri
+            View.prototype.find = function(ch) {
+              var found = this.findAll(ch);
+              if (found.length == 0) return null;
+              return randomElement(found);
+            };
+
+            // funckia, ktora sa pouziva na zmenu smeru "o pocet n" v smere hodinovych ruciciek
+            // ak napr. dir = "n" a n=2, funkcia vrati smer "e"
+            // ak napr. 
+            function dirPlus(dir, n) {
+              var index = directionNames.indexOf(dir);
+              return directionNames[(index + n + 8) % 8];
+            }
+
+            // definicia objektu zivocicha, ktory sa pohybuje pozdlz steny "sveta"
+            function WallFollower() {
+              this.dir = "s";
+            }
+            // metoda na pohyb zivocicha pozdlz steny
+            WallFollower.prototype.act = function(view) {
+              var start = this.dir;
+              if (view.look(dirPlus(this.dir, -3)) != " ")
+                start = this.dir = dirPlus(this.dir, -2);
+              while (view.look(this.dir) != " ") {
+                this.dir = dirPlus(this.dir, 1);
+                if (this.dir == start) break;
+              }
+              return {type: "move", direction: this.dir};
+            };
+
+            // objekt LifelikeWorld je odvodeny z objektu World
+            function LifelikeWorld(map, legend) {
+              // je zavolany konstruktor objektu World  
+              World.call(this, map, legend);
+            }
+            // a LifelikeWorld je vytvoreny na zaklade World
+            LifelikeWorld.prototype = Object.create(World.prototype);
+            // pre LifelikeWorld zadefinujeme inu metodu letAct  
+            // namiesto toho, aby letAct priamo vykonal cinnost, zavola metodu 
+            // z pola cinnosti
+            // ak zivocich vykona nejaku cinnost, tak stav jeho energie 
+            // sa znizi, ak zivocich uz nema energiu, zmizne (zomrie)
+            // poznamky:
+            // - metoda objektu actionTypes je vyvolana sposobom
+            //   actionTypes["grow"] (kedze vlastnost action.type je string),
+            //   co je to iste, ako actionTypes.grow
+            // - metoda objektu actionTypes je volana pomocou call, aby sa preniesol
+            //   spravna referencia this (na objekt LifelikeWorld) 
+            LifelikeWorld.prototype.letAct = function(critter, vector) {
+              var action = critter.act(new View(this, vector));
+              var handled = action && action.type in actionTypes && 
+                actionTypes[action.type].call(this, critter,vector, action);
+              if (!handled) {
+                critter.energy -= 0.2;
+                if (critter.energy <= 0)
+                  this.grid.set(vector, null);
+              }
+            };
+            
+            // objekt na zadefinovanie cinnosti zivocichov  
+            var actionTypes = Object.create(null);
+
+            // metoda sa pouziva na rast - zvysuje sa energia zivocicha
+            actionTypes.grow = function(critter) {
+                critter.energy += 0.5;
+                return true;
+            };
+
+            // metoda sa pouziva na pohyb, skontroluje sa, ci ciel je spravny,
+            // ak ano, zivocich sa nastavi na nove miesto, zo stareho miesta 
+            // sa odstrani, a jeho energia sa znizi
+            actionTypes.move = function(critter, vector, action) {
+              var dest = this.checkDestination(action, vector);
+              if (dest === null || critter.energy <= 1 || this.grid.get(dest) !== null)
+                return false;
+              critter.energy -= 1;
+              this.grid.set(vector, null);
+              this.grid.set(dest, critter);
+              return true;
+            };
+
+            // metoda sa pouziva na jedenie, t.j. skontroluje sa, ci ciel je spravny
+            // a ci v cieli je nejaka energia
+            actionTypes.eat = function(critter, vector, action) {
+              var dest = this.checkDestination(action, vector);
+              // SKUSIT PREPISAT
+              var atDest = dest != null && this.grid.get(dest);
+              if (!atDest || atDest.energy === null)
+                return false;
+              critter.energy += atDest.energy;
+              this.grid.set(dest, null);
+              return true;
+            };
+
+            // metoda sa pouziva na reprodukciu,
+            // urci sa najprv, o akeho zivocicha ide, a vytvorime takeho isteho zivocicha
+            // skontroluje sa ciel, a tiez sa skontroluje, ci zivocich ma dostatok energie na reprodukciu
+            // ak vsetko je OK, do ciela sa nastavi potomok, a za reprodukciu sa stiahne dvojnasobna energia
+            // potomka
+            actionTypes.reproduce = function(critter, vector, action) {
+              var baby = elementFromChar(this.legend,
+                                         critter.originChar);
+              var dest = this.checkDestination(action, vector);
+              if (dest == null || critter.energy <= 2 * baby.energy || this.grid.get(dest) != null)
+                return false;
+              critter.energy -= 2 * baby.energy;
+              this.grid.set(dest, baby);
+              return true;
+            };
+
+            // vytvori sa objekt zivocicha "rastlina" s nahodnou energiou 
+            function Plant() {
+              this.energy = 3 + Math.random() * 4;
+            }
+            // rastlina urobi dve cinnosti:
+            // - ak ma dostatok energie, tak sa zreprodukuje 
+            // - ak energie nema dostatok, tak rastie
+            Plant.prototype.act = function(view) {
+              if (this.energy > 15) {
+                var space = view.find(" ");
+                if (space)
+                  return {type: "reproduce", direction: space};
+              }
+              if (this.energy < 20)
+                return {type: "grow"};
+            };
+
+            // vytvori sa objekt zivocicha "bylinozravec"
+            function PlantEater() {
+              this.energy = 20;
+            }
+            
+            // urobi nasledovne cinnosti:
+            // - ak ma dostatok energie, tak sa zreprodukuje (ak nasiel prazdnu poziciu)
+            // - ak v okoli najde rastlinu, tak ju zozere
+            // - ak v okoli nenajde rastlinu, ale nejaku prazdnu poziciu, tak tam "prejde"
+            PlantEater.prototype.act = function(view) {
+              var space = view.find(" ");
+              if (this.energy > 60 && space)
+                return {type: "reproduce", direction: space};
+              var plant = view.find("*");
+              if (plant)
+                return {type: "eat", direction: plant};
+              if (space)
+                return {type: "move", direction: space};
+            };
+
+            
+            // vytvorenie "instancie" sveta
+            var valley = new LifelikeWorld(
+              ["############################",
+               "#####                 ######",
+               "##   ***                **##",
+               "#   *##**         **  O  *##",
+               "#    ***     O    ##**    *#",
+               "#       O         ##***    #",
+               "#                 ##**     #",
+               "#   O       #*             #",
+               "#*          #**       O    #",
+               "#***        ##**    O    **#",
+               "##****     ###***       *###",
+               "############################"],
+              {"#": Wall,
+               "O": PlantEater,
+               "*": Plant}
+            );
+
+(function() {
+  "use strict";
+
+  var active = null;
+
+  function Animated(world) {
+    this.world = world;
+    var outer = (window.__sandbox ? window.__sandbox.output.div : document.body), doc = outer.ownerDocument;
+    var node = outer.appendChild(doc.createElement("div"));
+    node.style.cssText = "position: relative; width: intrinsic; width: fit-content;";
+    this.pre = node.appendChild(doc.createElement("pre"));
+    this.pre.appendChild(doc.createTextNode(world.toString()));
+    this.button = node.appendChild(doc.createElement("div"));
+    this.button.style.cssText = "position: absolute; bottom: 8px; right: -4.5em; color: white; font-family: tahoma, arial; " +
+      "background: #4ab; cursor: pointer; border-radius: 18px; font-size: 70%; width: 3.5em; text-align: center;";
+    this.button.innerHTML = "stop";
+    var self = this;
+    this.button.addEventListener("click", function() { self.clicked(); });
+    this.disabled = false;
+    if (active) active.disable();
+    active = this;
+    this.interval = setInterval(function() { self.tick(); }, 333);
+  }
+
+  Animated.prototype.clicked = function() {
+    if (this.disabled) return;
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+      this.button.innerHTML = "start";
+    } else {
+      var self = this;
+      this.interval = setInterval(function() { self.tick(); }, 333);
+      this.button.innerHTML = "stop";
+    }
+  };
+
+  Animated.prototype.tick = function() {
+    this.world.turn();
+    this.pre.removeChild(this.pre.firstChild);
+    this.pre.appendChild(this.pre.ownerDocument.createTextNode(this.world.toString()));
+  };
+
+  Animated.prototype.disable = function() {
+    this.disabled = true;
+    clearInterval(this.interval);
+    this.button.innerHTML = "Disabled";
+    this.button.style.color = "red";
+  };
+
+  window.animateWorld = function(world) { new Animated(world); };
+})();
+
+            function onLoad() {
+                animateWorld(valley);
+            }
+            
+        </script>
+    </head>
+    <body onload="onLoad()">
+        <div>TODO write content</div>
+    </body>
+</html>
